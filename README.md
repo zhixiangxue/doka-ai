@@ -10,14 +10,6 @@
 
 Secure, isolated sandboxes for AI Agents — without the cloud dependency.
 
-```python
-from doka import Sandbox
-
-with Sandbox() as sandbox:
-    result = sandbox.commands.run('echo "Hello from Doka!"')
-    print(result.stdout)  # Hello from Doka!
-```
-
 </div>
 
 ---
