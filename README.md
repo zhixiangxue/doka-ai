@@ -8,138 +8,51 @@
 
 **Self-hosted. Pluggable. Agent-ready.**
 
-doka is a lightweight sandbox runtime for AI Agents — like E2B, but self-hosted and runtime-pluggable. It gives developers a simple programmable environment for running commands, moving files, and managing isolated execution without forcing them into a specific Agent framework.
-
-Agents are hard to standardize. Commands are not. doka focuses on the universal primitive every Agent eventually needs: a safe place to run code.
-
-</div>
-
----
-
-## Core Features
-
-### Minimalist API
-
-No servers, no orchestration boilerplate, no Agent-specific adapter required:
-
-```python
-from doka import Sandbox
-
-with Sandbox() as sandbox:
-    result = sandbox.commands.run('echo "Hello from Doka Sandbox!"')
-    print(result.stdout)
-```
-
-Write files, execute scripts, and read outputs from the sandbox:
-
-```python
-from doka import Sandbox
-
-with Sandbox() as sandbox:
-    sandbox.files.write("/tmp/agent.py", "print('Hello from an agent script')\n")
-
-    result = sandbox.commands.run("python /tmp/agent.py")
-    print(result.stdout)
-```
-
-### Command-first Agent Runtime
-
-doka does not try to guess how your Agent should start.
-
-LangChain, AutoGen, CrewAI, custom scripts, shell workflows, compiled binaries — every Agent has a different lifecycle. Instead of forcing an `Agent` abstraction, doka gives you an isolated machine-like environment and lets you run whatever command makes sense.
-
-```python
-with Sandbox() as sandbox:
-    sandbox.files.write("/workspace/main.py", agent_code)
-    result = sandbox.commands.run("python /workspace/main.py")
-```
-
-### File I/O Built In
-
-Move data in and out of the sandbox without exposing Docker internals:
-
-```python
-with Sandbox() as sandbox:
-    sandbox.files.write("/tmp/input.txt", "hello")
-    sandbox.commands.run("cat /tmp/input.txt > /tmp/output.txt")
-    output = sandbox.files.read("/tmp/output.txt")
-```
-
-### Resource Controls
-
-Limit CPU, memory, network, and filesystem behavior with a small configuration object:
-
-```python
-from doka import Limits, Sandbox
-
-limits = Limits(
-    cpu="1.0",
-    memory="512m",
-    timeout=60,
-    network=False,
-    fs_readonly=False,
-)
-
-with Sandbox(limits=limits) as sandbox:
-    result = sandbox.commands.run("python agent.py")
-```
-
-### Pluggable Runtime Backends
-
-doka starts with Docker for local development and quick iteration, while keeping the runtime layer open for stronger isolation backends.
-
-| Runtime | Status | Isolation | Best for |
-| --- | --- | --- | --- |
-| Docker | Available | Container isolation | Local development, trusted code |
-| gVisor | Planned | Userspace kernel sandbox | Production Agent workloads |
-| Kata Containers | Planned | Lightweight VM isolation | High-security workloads |
-
-The public API stays the same while the backend changes:
-
-```python
-with Sandbox(runtime="docker") as sandbox:
-    sandbox.commands.run("python agent.py")
-
-# Future:
-# with Sandbox(runtime="gvisor") as sandbox:
-#     sandbox.commands.run("python agent.py")
-```
-
----
-
-## Quick Start
-
-### Requirements
-
-- Python 3.10+
-- Docker Desktop or Docker Engine
-- Linux containers enabled when running on Windows
-
-### Installation
-
-From PyPI after release:
-
-```bash
-pip install dokapy
-```
-
-For local development:
-
-```bash
-pip install -e .
-```
-
-### Run a Sandbox Command
+Secure, isolated sandboxes for AI Agents — without the cloud dependency.
 
 ```python
 from doka import Sandbox
 
 with Sandbox() as sandbox:
     result = sandbox.commands.run('echo "Hello from Doka!"')
-    print(result.stdout)
+    print(result.stdout)  # Hello from Doka!
 ```
 
-### Run an Agent Script
+</div>
+
+---
+
+## What is doka?
+
+doka gives AI Agents a safe place to run code. It provides a programmable, isolated execution environment where developers can run commands, move files, and control resources — without being locked into any Agent framework or cloud provider.
+
+Runs entirely on your own infrastructure. No API key. No usage limit. No data leaving your machine.
+
+---
+
+## Quick Start
+
+### 1. Install
+
+```bash
+pip install dokapy
+```
+
+### 2. Start Docker
+
+Make sure Docker Desktop (or Docker Engine) is running.
+
+### 3. Run your first sandbox
+
+```python
+from doka import Sandbox
+
+with Sandbox() as sandbox:
+    result = sandbox.commands.run('echo "Hello from Doka!"')
+    print(result.stdout)  # Hello from Doka!
+```
+
+### 4. Run an Agent script inside the sandbox
 
 ```python
 from doka import Sandbox
@@ -155,13 +68,59 @@ with Sandbox() as sandbox:
     print(result.stdout)
 ```
 
-### Local Demo
+---
 
-A temporary Docker demo is available in `playground/docker_demo.py`.
+## Core Features
 
-```bash
-python playground/docker_demo.py
+### Command-first — works with any Agent framework
+
+doka does not try to standardize how Agents start. LangChain, AutoGen, CrewAI, custom scripts, compiled binaries — bring your own Agent, run it with a command.
+
+```python
+with Sandbox() as sandbox:
+    sandbox.files.write("/workspace/main.py", agent_code)
+    result = sandbox.commands.run("python /workspace/main.py")
+    output = sandbox.files.read("/workspace/output.json")
 ```
+
+### File I/O
+
+```python
+with Sandbox() as sandbox:
+    sandbox.files.write("/tmp/input.txt", "hello")
+    sandbox.commands.run("cat /tmp/input.txt > /tmp/output.txt")
+    output = sandbox.files.read("/tmp/output.txt")
+```
+
+### Streaming output for long-running processes
+
+```python
+process = sandbox.commands.run("python -u agent.py", background=True)
+
+for chunk in process.stdout.stream():
+    print(chunk, end="")
+
+exit_code = process.wait()
+```
+
+### Resource controls
+
+```python
+from doka import Limits, Sandbox
+
+with Sandbox(limits=Limits(cpu="1.0", memory="512m", network=False)) as sandbox:
+    result = sandbox.commands.run("python agent.py")
+```
+
+### Pluggable runtime backends
+
+| Runtime | Status | Isolation |
+| --- | --- | --- |
+| Docker | Available | Container isolation |
+| gVisor | Planned | Userspace kernel sandbox |
+| Kata Containers | Planned | Lightweight VM isolation |
+
+The API stays the same regardless of which backend you use.
 
 ---
 
@@ -257,16 +216,13 @@ Resource constraints for the sandbox.
 
 ## Why doka?
 
-AI Agents need execution environments, not another framework-specific wrapper.
+doka is for teams and developers who want a self-hosted sandbox without the overhead of a cloud service:
 
-doka gives you the minimum useful abstraction:
+- **No API key.** Runs on your machine or your server.
+- **No usage limits.** Run as many sandboxes as your hardware allows.
+- **No lock-in.** Swap the isolation backend as your security requirements grow.
+- **No framework assumptions.** Works with any Agent, any stack, any language.
 
-```python
-sandbox = Sandbox()
-result = sandbox.commands.run("your command here")
-```
-
-Everything else — which Agent framework to use, how to start it, what files it needs, what it outputs — stays under developer control.
 
 ---
 
