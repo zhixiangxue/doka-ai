@@ -9,7 +9,7 @@ description = "A lightweight, secure sandbox runtime for AI Agents"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["ai", "agent", "sandbox", "runtime", "docker", "gvisor"]
+keywords = ["ai", "agent", "sandbox", "runtime", "docker", "cubesandbox"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -28,6 +28,9 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.23",
+]
+cube = [
+    "e2b-code-interpreter>=2.4.1",
 ]
 
 [tool.setuptools.packages.find]

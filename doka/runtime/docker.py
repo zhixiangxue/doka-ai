@@ -24,7 +24,7 @@ class DockerRuntime(BaseRuntime):
     File I/O is handled via tar archives (Docker's native put_archive API).
     """
 
-    def __init__(self, limits: Limits, image: Optional[str] = None):
+    def __init__(self, limits: Limits, image: Optional[str] = None, connect: Optional[dict] = None, **kwargs):
         self._limits = limits
         self._image = image or _DEFAULT_IMAGE
         self._client = docker.from_env()
