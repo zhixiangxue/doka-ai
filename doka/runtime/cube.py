@@ -1,13 +1,33 @@
 import os
 import queue
+import socket
 import threading
 import uuid
 from typing import Iterator, Optional
+from urllib.parse import urlparse
 
 from ..limits import Limits
 from ..result import CommandResult
 from ..exceptions import RuntimeError as DokaRuntimeError
 from .base import BaseRuntime
+
+# API port -> CubeSandbox HTTPS proxy port
+# Bare-metal default : API 3000  -> CubeProxy HTTPS 443
+# QEMU dev-env       : API 13000 -> CubeProxy HTTPS 11443 (hostfwd mapping)
+_API_TO_PROXY_PORT: dict[int, int] = {
+    3000: 443,
+    13000: 11443,
+}
+
+# Candidate API ports to probe when auto-discovering a local CubeSandbox
+_DISCOVERY_PORTS = (3000, 13000)
+
+# Paths where mkcert installs its root CA by default
+_MKCERT_CA_CANDIDATES = [
+    "/tmp/cube-rootCA.pem",
+    os.path.expanduser("~/.local/share/mkcert/rootCA.pem"),
+    "/root/.local/share/mkcert/rootCA.pem",
+]
 
 
 class CubeRuntime(BaseRuntime):
@@ -29,21 +49,11 @@ class CubeRuntime(BaseRuntime):
     Args:
         image:   CubeSandbox template ID (e.g. ``"tpl-abc123"``).  Obtained from
                  ``cubemastercli tpl list`` after creating a template.
-        connect: Connection info dict.  Supported keys:
-
-                   endpoint
-                       CubeSandbox API URL.  Default: ``"http://localhost:3000"``.
-                   api_key
-                       API key string.  Any non-empty value works.  Default: ``"dummy"``.
 
     Example::
-    
-        with Sandbox(
-            runtime="cube",
-            image="tpl-abc123",
-            connect={"endpoint": "http://127.0.0.1:3000"},
-        ) as sb:
-            result = sb.run("echo hello")
+
+        with Sandbox(runtime="cube", image="tpl-abc123", limits=limits) as sb:
+            result = sb.commands.run("echo hello")
             print(result.stdout)
     """
 
@@ -51,7 +61,6 @@ class CubeRuntime(BaseRuntime):
         self,
         limits: Limits,
         image: Optional[str] = None,
-        connect: Optional[dict] = None,
         **kwargs,
     ):
         try:
@@ -62,16 +71,72 @@ class CubeRuntime(BaseRuntime):
                 "Install with: pip install 'dokapy[cube]'"
             ) from None
 
-        connect = connect or {}
         self._e2b = _e2b
         self._limits = limits
         self._template_id = image or ""
-        self._endpoint = connect.get("endpoint", "http://localhost:3000")
-        self._api_key = connect.get("api_key", "dummy")
+
+        # Auto-discover the local CubeSandbox API endpoint
+        self._endpoint = self._discover_endpoint()
+        self._api_key = "dummy"
+
+        # Derive the CubeProxy HTTPS port from the API port
+        api_port = urlparse(self._endpoint).port or 3000
+        self._proxy_port: int = _API_TO_PROXY_PORT.get(api_port, 443)
+
+        # Auto-discover the mkcert root CA for SSL verification
+        self._ssl_cert: Optional[str] = (
+            os.environ.get("SSL_CERT_FILE")
+            or self._find_mkcert_ca()
+        )
 
         self._sandbox = None
         # exec_id -> (CommandHandle, Thread, output_queue, exit_code_holder)
         self._bg_processes: dict = {}
+
+        # Apply SSL + DNS patches now so they're in place before any SDK call
+        self._apply_local_patches()
+
+    # ------------------------------------------------------------------
+    # Local connection helpers (auto-discovery, SSL cert + DNS)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _discover_endpoint() -> str:
+        """Probe well-known local ports to find a running CubeSandbox API."""
+        for port in _DISCOVERY_PORTS:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                if s.connect_ex(("127.0.0.1", port)) == 0:
+                    return f"http://127.0.0.1:{port}"
+        # Fall back to the standard bare-metal port
+        return "http://localhost:3000"
+
+    @staticmethod
+    def _find_mkcert_ca() -> Optional[str]:
+        """Return the first mkcert root-CA PEM found in well-known locations."""
+        for path in _MKCERT_CA_CANDIDATES:
+            if os.path.isfile(path):
+                return path
+        return None
+
+    def _apply_local_patches(self) -> None:
+        """Configure SSL trust and patch DNS so *.cube.app resolves locally."""
+        # 1. Point Python's SSL stack at the mkcert root CA
+        if self._ssl_cert and "SSL_CERT_FILE" not in os.environ:
+            os.environ["SSL_CERT_FILE"] = self._ssl_cert
+
+        # 2. Redirect *.cube.app -> 127.0.0.1:<proxy_port>
+        #    run_code / commands connect to https://<port>-<id>.cube.app;
+        #    we transparently route those to the local CubeProxy.
+        proxy_port = self._proxy_port
+        _orig = socket.getaddrinfo
+
+        def _patched_getaddrinfo(host, port, *args, **kwargs):
+            if isinstance(host, str) and host.endswith(".cube.app"):
+                return _orig("127.0.0.1", proxy_port, *args, **kwargs)
+            return _orig(host, port, *args, **kwargs)
+
+        socket.getaddrinfo = _patched_getaddrinfo
 
     # ------------------------------------------------------------------
     # Lifecycle
