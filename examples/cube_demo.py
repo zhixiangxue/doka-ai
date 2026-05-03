@@ -15,7 +15,7 @@ import sys
 # Load configuration from environment variables.
 # ---------------------------------------------------------------------------
 
-CUBE_TEMPLATE = os.environ.get("CUBE_TEMPLATE_ID", "")
+CUBE_TEMPLATE = os.environ.get("CUBE_TEMPLATE_ID", "tpl-4145ef7d4a8d40b7ba48003c")
 
 if not CUBE_TEMPLATE:
     print("ERROR: CUBE_TEMPLATE_ID is not set.")

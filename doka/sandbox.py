@@ -3,16 +3,19 @@ from typing import Optional
 from .commands import CommandsClient
 from .files import FilesClient
 from .limits import Limits
+from .uri import parse as parse_runtime_uri
 from .runtime.base import BaseRuntime
 from .runtime.docker import DockerRuntime
 from .runtime.cube import CubeRuntime
+from .runtime.kata import KataRuntime
 from .exceptions import SandboxAlreadyClosedError
 
-# Runtime name -> implementation class registry.
+# driver -> implementation class registry.
 # Adding a new backend only requires one new entry here.
 _RUNTIME_REGISTRY: dict[str, type[BaseRuntime]] = {
     "docker": DockerRuntime,
     "cube": CubeRuntime,
+    "kata": KataRuntime,
 }
 
 
@@ -31,35 +34,27 @@ class Sandbox:
         runtime: str = "docker",
         limits: Optional[Limits] = None,
         image: Optional[str] = None,
-        connect: Optional[dict] = None,
     ):
         """
         Args:
-            runtime: Backend runtime to use. Options: "docker" | "cube".
+            runtime: Backend runtime URI. Format: '<driver>[:<variant>]'.
+                     Examples: "docker", "docker:gvisor", "cube".
             limits:  Resource constraints. Defaults to Limits() with sensible defaults.
             image:   What to run. For docker: an OCI image name (e.g. "python:3.11-slim").
                      For cube: a CubeSandbox template ID (e.g. "tpl-abc123").
-            connect: Runtime connection info (cube only).
-                     Supported keys: endpoint, api_key, ssl_cert.
-                     Example: {"endpoint": "http://localhost:3000", "api_key": "dummy"}
         """
         self._closed = False
         self._limits = limits or Limits()
         self._image = image
-        self._connect = connect or {}
         self._runtime = self._build_runtime(runtime)
 
         self.commands = CommandsClient(self._runtime)
         self.files = FilesClient(self._runtime)
 
-    def _build_runtime(self, name: str) -> BaseRuntime:
-        cls = _RUNTIME_REGISTRY.get(name)
-        if cls is None:
-            raise ValueError(
-                f"Unsupported runtime: '{name}'. "
-                f"Available: {list(_RUNTIME_REGISTRY.keys())}"
-            )
-        return cls(limits=self._limits, image=self._image, connect=self._connect)
+    def _build_runtime(self, uri_str: str) -> BaseRuntime:
+        uri = parse_runtime_uri(uri_str)
+        cls = _RUNTIME_REGISTRY[uri.driver]  # parse() already validated the driver
+        return cls(limits=self._limits, image=self._image, variant=uri.variant)
 
     # ------------------------------------------------------------------
     # Lifecycle

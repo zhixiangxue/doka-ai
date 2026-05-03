@@ -24,9 +24,10 @@ class DockerRuntime(BaseRuntime):
     File I/O is handled via tar archives (Docker's native put_archive API).
     """
 
-    def __init__(self, limits: Limits, image: Optional[str] = None, connect: Optional[dict] = None, **kwargs):
+    def __init__(self, limits: Limits, image: Optional[str] = None, variant: Optional[str] = None, **kwargs):
         self._limits = limits
         self._image = image or _DEFAULT_IMAGE
+        self._variant = variant  # None = plain runc, "gvisor" = runsc
         self._client = docker.from_env()
         self._container = None
         # Maps exec_id -> exec object for background process tracking
@@ -40,10 +41,10 @@ class DockerRuntime(BaseRuntime):
 
     def start(self) -> None:
         """Spin up a long-running sandbox container."""
-        cpu_quota = int(float(self._limits.cpu) * 100_000)  # microseconds per 100ms
-        self._container = self._client.containers.run(
-            self._image,
-            command="sleep infinity",   # keep the container alive; commands are injected via exec
+        cpu_quota = int(float(self._limits.cpu) * 100_000)  # microseconds per 100ms period
+        run_kwargs = dict(
+            image=self._image,
+            command="sleep infinity",
             detach=True,
             cpu_quota=cpu_quota,
             cpu_period=100_000,
@@ -52,6 +53,9 @@ class DockerRuntime(BaseRuntime):
             read_only=self._limits.fs_readonly,
             name=f"doka-{uuid.uuid4().hex[:8]}",
         )
+        if self._variant == "gvisor":
+            run_kwargs["runtime"] = "runsc"
+        self._container = self._client.containers.run(**run_kwargs)
 
     def stop(self) -> None:
         """Force-remove the container."""

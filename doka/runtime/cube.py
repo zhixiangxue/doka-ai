@@ -61,6 +61,7 @@ class CubeRuntime(BaseRuntime):
         self,
         limits: Limits,
         image: Optional[str] = None,
+        variant: Optional[str] = None,  # reserved for future cube variants
         **kwargs,
     ):
         try:
