@@ -30,9 +30,9 @@ Runs entirely on your own infrastructure. No API key. No usage limit. No data le
 pip install dokapy
 ```
 
-### 2. Start Docker
+### 2. Start a runtime backend
 
-Make sure Docker Desktop (or Docker Engine) is running.
+The default runtime is `docker`. Make sure Docker Desktop (or Docker Engine) is running, or choose a different runtime — see [Pluggable runtime backends](#pluggable-runtime-backends).
 
 ### 3. Run your first sandbox
 
@@ -115,7 +115,7 @@ The `runtime` parameter accepts a URI of the form `<driver>[:<variant>]`.
 | `cube` | Available | KVM MicroVM | KVM-enabled x86_64 Linux + [CubeSandbox](https://github.com/TencentCloud/CubeSandbox) service running locally |
 | `kata` | Available | KVM MicroVM | KVM-enabled x86_64 Linux + Kata Containers + nerdctl + CNI plugins (see below) |
 
-#### OS support
+#### Runtime support (Runtime Parameter)
 
 | URI | Linux | macOS | Windows |
 | --- | --- | --- | --- |
